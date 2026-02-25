@@ -32,6 +32,24 @@ function detectObjection(text: string): boolean {
   return OBJECTION_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+/** Extract significant words from a section for matching against speech */
+function extractKeywords(text: string): string[] {
+  const stopWords = new Set(["the","a","an","is","are","was","were","be","been","being","have","has","had","do","does","did","will","would","shall","should","may","might","must","can","could","and","but","or","nor","for","yet","so","in","on","at","to","from","by","with","of","that","this","it","its","i","you","we","they","he","she","my","your","our","their","me","us","him","her","them","what","which","who","whom","whose","how","when","where","why","if","then","than","as","not","no","just","also","very","too","really","about","into","over","after","before","up","down","out","off","all","each","every","both","few","more","most","other","some","any","such","only","same","here","there","again","once","ok","okay","so","um","uh","like","right","well","now","let","want","going","get","got","put","say","said","tell","told","know","think","see","look","come","go","make","take","give","keep","find","need","feel","try","leave","call","start","end"]);
+  return text
+    .toLowerCase()
+    .replace(/\[.*?\]/g, "") // remove stage directions
+    .split(/\W+/)
+    .filter((w) => w.length > 2 && !stopWords.has(w));
+}
+
+/** Check how many keywords from a section have been spoken */
+function matchScore(sectionKeywords: string[], spokenText: string): number {
+  if (sectionKeywords.length === 0) return 0;
+  const spokenLower = spokenText.toLowerCase();
+  const matched = sectionKeywords.filter((kw) => spokenLower.includes(kw));
+  return matched.length / sectionKeywords.length;
+}
+
 const Session = () => {
   const navigate = useNavigate();
   const [sections, setSections] = useState<ScriptSection[]>([]);
@@ -43,9 +61,12 @@ const Session = () => {
   const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [liveCoachResponse, setLiveCoachResponse] = useState("");
   const [isLiveCoaching, setIsLiveCoaching] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const rawScript = sessionStorage.getItem("salesScript") || "";
   const coachDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentTranscriptRef = useRef("");
+  const sectionTranscriptRef = useRef(""); // accumulates transcript for the current section
+  const sectionKeywordsRef = useRef<string[]>([]);
 
   // Accumulate recent transcript text for context
   const handleTranscript = useCallback((text: string, isFinal: boolean) => {
@@ -58,6 +79,25 @@ const Session = () => {
     ]);
 
     recentTranscriptRef.current += " " + text;
+    sectionTranscriptRef.current += " " + text;
+
+    // Auto-advance: check if enough of the current section has been covered
+    if (autoAdvance && sectionKeywordsRef.current.length > 0) {
+      const score = matchScore(sectionKeywordsRef.current, sectionTranscriptRef.current);
+      if (score >= 0.25) {
+        // User has covered ~25% of section keywords — they're through this part
+        setCurrentIndex((prev) => {
+          const next = prev + 1;
+          if (next < sections.length) {
+            sectionTranscriptRef.current = "";
+            setCoachingTip("");
+            setLiveCoachResponse("");
+            return next;
+          }
+          return prev;
+        });
+      }
+    }
 
     // If objection detected, auto-open the objection panel
     if (isObjection) {
@@ -74,7 +114,7 @@ const Session = () => {
       triggerLiveCoach(recentTranscriptRef.current.trim());
       recentTranscriptRef.current = "";
     }, 5000);
-  }, []);
+  }, [autoAdvance, sections.length]);
 
   const handleSpeechError = useCallback((error: string) => {
     toast.error(error);
@@ -146,6 +186,14 @@ const Session = () => {
       setIsAnalyzing(false);
     }
   };
+
+  // Update keyword cache when section changes
+  useEffect(() => {
+    if (sections[currentIndex]) {
+      sectionKeywordsRef.current = extractKeywords(sections[currentIndex].content);
+      sectionTranscriptRef.current = "";
+    }
+  }, [currentIndex, sections]);
 
   const goNext = () => {
     if (currentIndex < sections.length - 1) {
@@ -316,6 +364,18 @@ const Session = () => {
               <ChevronLeft className="h-4 w-4" />
               Previous
             </Button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAutoAdvance(!autoAdvance)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  autoAdvance
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {autoAdvance ? "Auto-advance ON" : "Auto-advance OFF"}
+              </button>
+            </div>
             <Button
               onClick={goNext}
               disabled={currentIndex === sections.length - 1}

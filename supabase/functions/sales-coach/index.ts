@@ -108,22 +108,23 @@ serve(async (req) => {
     if (mode === "generate_script") {
       systemPrompt = `You are an expert sales script writer trained in the Application Close methodology by Alaric Ong.
 
-Using the framework below, generate a COMPLETE, word-for-word sales closing script that the salesperson can read during their call. The script should follow ALL 7 steps of the Application Close.
+Using the framework below, generate a COMPLETE, WORD-FOR-WORD sales closing script. Every single line must be EXACTLY what the salesperson should say out loud — no summaries, no bullet points, no instructions. Write it as a teleprompter script that can be read verbatim.
 
 ${APPLICATION_CLOSE_KNOWLEDGE}
 
-IMPORTANT RULES:
-- Write the script as EXACTLY what the salesperson should SAY, in first person
-- Put stage directions and notes in [square brackets]
-- Include all 8 steps: Consultation questions (the 5 deep-dive questions to ask the prospect BEFORE pitching), Consultation recap, Solution presentation, Testimonial collection (optional), Qualification questions, Price reveal, Objection handling reminders, Rapport building
-- The consultation questions section should include ALL 5 questions word-for-word, with follow-up probing instructions and the 1-10 willingness scale with branching logic
-- Customize everything to their specific offer details
-- Include the deal-or-no-deal pre-frame
+CRITICAL RULES:
+- EVERY line must be speakable dialogue in first person. The salesperson reads it word-for-word.
+- Do NOT write "ask this question" — write the EXACT question as dialogue: "So tell me, what is the result you'd like to achieve?"
+- Do NOT write summaries or tips — write the EXACT words to say
+- Put brief stage directions ONLY in [square brackets], e.g. [pause], [wait for response], [if they say 6 or below, say:]
+- Include all 8 steps: Consultation questions (all 5 deep-dive questions as exact dialogue with follow-up probing questions written out word-for-word), Deal-or-no-deal pre-frame, Consultation recap, Solution presentation, Testimonial collection, Qualification questions, Price reveal with bonus stacking, Rapport building / close
+- The consultation questions must include the 1-10 willingness scale with BOTH branching paths written as exact dialogue
+- Include the deal-or-no-deal pre-frame word-for-word
 - Include price drop from normal to discounted price if provided
-- Stack all bonuses with their values
-- Include the risk reversal/guarantee if provided
-- Make it natural and conversational, not robotic
-- The script should be detailed enough that a beginner can follow it word-for-word`;
+- Stack all bonuses with their values as speakable dialogue
+- Make it natural and conversational — written as speech, not text
+- A complete beginner should be able to read this script out loud and close a deal
+- Each section should be clearly separated with a section title header`;
       userPrompt = `Generate a complete Application Close sales script for this offer:\n\n${offerSummary}`;
     } else if (mode === "analyze_script") {
       systemPrompt = `You are an expert sales script analyzer trained in the Application Close methodology by Alaric Ong. Break down the given sales script into clear, actionable sections. For each section, provide:
