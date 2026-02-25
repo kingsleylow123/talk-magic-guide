@@ -48,6 +48,7 @@ export function useSpeechRecognition({
 
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const displayStreamRef = useRef<MediaStream | null>(null);
+  const restartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartingRef = useRef(false);
   const activeSourceRef = useRef<AudioSource>("mic");
 
@@ -59,6 +60,11 @@ export function useSpeechRecognition({
 
   const cleanup = useCallback(() => {
     restartingRef.current = false;
+
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
+    }
 
     if (recognitionRef.current) {
       try {
@@ -122,11 +128,16 @@ export function useSpeechRecognition({
 
     recognition.onend = () => {
       if (!restartingRef.current) return;
-      try {
-        recognition.start();
-      } catch {
-        cleanup();
-      }
+
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = setTimeout(() => {
+        if (!restartingRef.current) return;
+        try {
+          recognition.start();
+        } catch {
+          cleanup();
+        }
+      }, 250);
     };
 
     return recognition;
@@ -138,6 +149,24 @@ export function useSpeechRecognition({
 
       setAudioSource(source);
       activeSourceRef.current = source;
+
+      // Preflight microphone permission for any mode that includes mic input.
+      // This restores reliable behavior on browsers where SpeechRecognition
+      // does not consistently trigger the permission prompt on its own.
+      if (source === "mic" || source === "both") {
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          micStream.getTracks().forEach((track) => track.stop());
+        } catch {
+          if (window.self !== window.top) {
+            onError?.("Microphone access is blocked in embedded preview. Open the app in a new tab and allow mic access.");
+          } else {
+            onError?.("Microphone access denied. Please allow microphone permissions and try again.");
+          }
+          cleanup();
+          return;
+        }
+      }
 
       // Keep previous UX for system/both selection, but never block mic transcription.
       if (source === "system" || source === "both") {
