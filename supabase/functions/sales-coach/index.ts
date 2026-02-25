@@ -115,7 +115,8 @@ ${APPLICATION_CLOSE_KNOWLEDGE}
 IMPORTANT RULES:
 - Write the script as EXACTLY what the salesperson should SAY, in first person
 - Put stage directions and notes in [square brackets]
-- Include all 7 steps: Consultation recap, Solution presentation, Testimonial collection (optional), Qualification questions, Price reveal, Objection handling reminders, Rapport building
+- Include all 8 steps: Consultation questions (the 5 deep-dive questions to ask the prospect BEFORE pitching), Consultation recap, Solution presentation, Testimonial collection (optional), Qualification questions, Price reveal, Objection handling reminders, Rapport building
+- The consultation questions section should include ALL 5 questions word-for-word, with follow-up probing instructions and the 1-10 willingness scale with branching logic
 - Customize everything to their specific offer details
 - Include the deal-or-no-deal pre-frame
 - Include price drop from normal to discounted price if provided
