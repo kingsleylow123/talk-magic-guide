@@ -205,66 +205,76 @@ export function useSpeechRecognition({
       setAudioSource(source);
       activeSourceRef.current = source;
 
+      // For mic-only mode, skip all AudioContext/stream setup — just use speech recognition directly
+      if (source === "mic") {
+        const recognition = startRecognition();
+        if (!recognition) return;
+        recognitionRef.current = recognition;
+        restartingRef.current = true;
+        try {
+          recognition.start();
+          setIsListening(true);
+        } catch {
+          onError?.("Failed to start speech recognition. Please allow microphone access.");
+          cleanup();
+        }
+        return;
+      }
+
+      // For system/both modes, set up AudioContext and streams
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
 
-      // Get mic stream for level monitoring (in "mic" or "both" mode)
-      if (source === "mic" || source === "both") {
+      // Get mic stream for level monitoring (in "both" mode)
+      if (source === "both") {
         try {
           const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           micStreamRef.current = micStream;
           micMonitorRef.current = createLevelMonitor(micStream, audioContext);
         } catch {
-          if (source === "mic") {
-            onError?.("Microphone access denied.");
-            cleanup();
-            return;
-          }
+          // Fall through — mic level monitoring is optional for speaker detection
         }
       }
 
-      // For system/both: capture tab audio
-      if (source === "system" || source === "both") {
-        try {
-          // getDisplayMedia requires the page NOT be in an iframe
-          if (window.self !== window.top) {
-            throw new Error("iframe");
-          }
-          const displayStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: true,
-          });
-          displayStreamRef.current = displayStream;
+      // Capture tab/system audio
+      try {
+        if (window.self !== window.top) {
+          throw new Error("iframe");
+        }
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        displayStreamRef.current = displayStream;
 
-          // Monitor system audio levels
-          systemMonitorRef.current = createLevelMonitor(displayStream, audioContext);
+        // Monitor system audio levels
+        systemMonitorRef.current = createLevelMonitor(displayStream, audioContext);
 
-          // Route system audio to speakers so mic captures it for speech recognition
-          const systemSrc = audioContext.createMediaStreamSource(displayStream);
-          systemSrc.connect(audioContext.destination);
+        // Route system audio to speakers so mic captures it for speech recognition
+        const systemSrc = audioContext.createMediaStreamSource(displayStream);
+        systemSrc.connect(audioContext.destination);
 
-          // Stop video track (we only need audio)
-          displayStream.getVideoTracks().forEach((t) => t.stop());
+        // Stop video track (we only need audio)
+        displayStream.getVideoTracks().forEach((t) => t.stop());
 
-          // Handle user stopping screen share
-          displayStream.getAudioTracks().forEach((track) => {
-            track.onended = () => cleanup();
-          });
-        } catch (err) {
-          const isIframe = err instanceof Error && err.message === "iframe";
-          if (source === "system") {
-            onError?.(
-              isIframe
-                ? "Tab audio capture doesn't work in embedded preview. Open the app in a new tab (click the arrow icon top-right), then try again."
-                : "Screen/tab audio capture cancelled or not supported."
-            );
-            cleanup();
-            return;
-          }
-          // For "both", fall back to mic only and notify
-          if (isIframe) {
-            onError?.("Tab audio unavailable in preview — using mic only. Open in a new tab for full dual-source capture.");
-          }
+        // Handle user stopping screen share
+        displayStream.getAudioTracks().forEach((track) => {
+          track.onended = () => cleanup();
+        });
+      } catch (err) {
+        const isIframe = err instanceof Error && err.message === "iframe";
+        if (source === "system") {
+          onError?.(
+            isIframe
+              ? "Tab audio capture doesn't work in embedded preview. Open the app in a new tab, then try again."
+              : "Screen/tab audio capture cancelled or not supported."
+          );
+          cleanup();
+          return;
+        }
+        // For "both", fall back to mic only
+        if (isIframe) {
+          onError?.("Tab audio unavailable in preview — using mic only.");
         }
       }
 
