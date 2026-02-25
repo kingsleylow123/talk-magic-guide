@@ -17,7 +17,6 @@ interface UseSpeechRecognitionReturn {
   interimTranscript: string;
 }
 
-// Extend Window for webkit prefix
 interface SpeechRecognitionType extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -38,41 +37,6 @@ declare global {
   }
 }
 
-/**
- * Monitors RMS volume of an audio stream using an AnalyserNode.
- * Returns a ref that always holds the current RMS level (0–1).
- */
-function createLevelMonitor(stream: MediaStream, audioCtx: AudioContext) {
-  const source = audioCtx.createMediaStreamSource(stream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
-  const dataArray = new Float32Array(analyser.frequencyBinCount);
-
-  let level = 0;
-  let rafId: number | null = null;
-
-  function tick() {
-    analyser.getFloatTimeDomainData(dataArray);
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i] * dataArray[i];
-    }
-    level = Math.sqrt(sum / dataArray.length);
-    rafId = requestAnimationFrame(tick);
-  }
-
-  tick();
-
-  return {
-    getLevel: () => level,
-    stop: () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      source.disconnect();
-    },
-  };
-}
-
 export function useSpeechRecognition({
   onTranscript,
   onError,
@@ -81,72 +45,35 @@ export function useSpeechRecognition({
   const [isListening, setIsListening] = useState(false);
   const [audioSource, setAudioSource] = useState<AudioSource>("mic");
   const [interimTranscript, setInterimTranscript] = useState("");
+
   const recognitionRef = useRef<SpeechRecognitionType | null>(null);
   const displayStreamRef = useRef<MediaStream | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const restartingRef = useRef(false);
   const activeSourceRef = useRef<AudioSource>("mic");
 
-  // Audio level monitors
-  const micMonitorRef = useRef<{ getLevel: () => number; stop: () => void } | null>(null);
-  const systemMonitorRef = useRef<{ getLevel: () => number; stop: () => void } | null>(null);
-
-  // Running average of levels to smooth out spikes
-  const micLevelHistoryRef = useRef<number[]>([]);
-  const systemLevelHistoryRef = useRef<number[]>([]);
-
   const determineSpeaker = useCallback((): Speaker => {
-    const source = activeSourceRef.current;
-    // If only one source, speaker is obvious
-    if (source === "mic") return "salesperson";
-    if (source === "system") return "prospect";
-
-    // "both" mode — compare audio levels
-    const micLevel = micMonitorRef.current?.getLevel() ?? 0;
-    const sysLevel = systemMonitorRef.current?.getLevel() ?? 0;
-
-    // Push to rolling history (last 10 samples ~ last few hundred ms)
-    micLevelHistoryRef.current.push(micLevel);
-    systemLevelHistoryRef.current.push(sysLevel);
-    if (micLevelHistoryRef.current.length > 10) micLevelHistoryRef.current.shift();
-    if (systemLevelHistoryRef.current.length > 10) systemLevelHistoryRef.current.shift();
-
-    const avgMic = micLevelHistoryRef.current.reduce((a, b) => a + b, 0) / micLevelHistoryRef.current.length;
-    const avgSys = systemLevelHistoryRef.current.reduce((a, b) => a + b, 0) / systemLevelHistoryRef.current.length;
-
-    // If system audio is significantly louder, it's the prospect speaking
-    // Use a threshold because mic may also pick up leaked system audio
-    if (avgSys > avgMic * 1.5 && avgSys > 0.01) {
-      return "prospect";
-    }
-    return "salesperson";
+    // Stable fallback behavior: only system-only mode maps to prospect.
+    // Mic and both map to salesperson to avoid fragile diarization logic.
+    return activeSourceRef.current === "system" ? "prospect" : "salesperson";
   }, []);
 
   const cleanup = useCallback(() => {
     restartingRef.current = false;
-    micMonitorRef.current?.stop();
-    micMonitorRef.current = null;
-    systemMonitorRef.current?.stop();
-    systemMonitorRef.current = null;
-    micLevelHistoryRef.current = [];
-    systemLevelHistoryRef.current = [];
+
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch {}
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // no-op
+      }
       recognitionRef.current = null;
     }
+
     if (displayStreamRef.current) {
-      displayStreamRef.current.getTracks().forEach((t) => t.stop());
+      displayStreamRef.current.getTracks().forEach((track) => track.stop());
       displayStreamRef.current = null;
     }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
+
     setIsListening(false);
     setInterimTranscript("");
   }, []);
@@ -166,33 +93,39 @@ export function useSpeechRecognition({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = "";
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
+
         if (event.results[i].isFinal) {
-          const speaker = determineSpeaker();
-          onTranscript(transcript, true, speaker);
+          onTranscript(transcript, true, determineSpeaker());
         } else {
           interim += transcript;
         }
       }
+
       setInterimTranscript(interim);
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error === "aborted" || event.error === "no-speech") return;
-      if (event.error === "not-allowed") {
-        onError?.("Microphone access denied. Please allow mic permissions.");
+
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        onError?.("Microphone access denied. Please allow microphone permissions and try again.");
         cleanup();
         return;
       }
+
       onError?.(`Speech recognition error: ${event.error}`);
+      cleanup();
     };
 
     recognition.onend = () => {
-      if (restartingRef.current) {
-        try {
-          recognition.start();
-        } catch {}
+      if (!restartingRef.current) return;
+      try {
+        recognition.start();
+      } catch {
+        cleanup();
       }
     };
 
@@ -202,79 +135,48 @@ export function useSpeechRecognition({
   const start = useCallback(
     async (source: AudioSource) => {
       cleanup();
+
       setAudioSource(source);
       activeSourceRef.current = source;
 
-      // For mic-only mode, skip all AudioContext/stream setup — just use speech recognition directly
-      if (source === "mic") {
-        const recognition = startRecognition();
-        if (!recognition) return;
-        recognitionRef.current = recognition;
-        restartingRef.current = true;
-        try {
-          recognition.start();
-          setIsListening(true);
-        } catch {
-          onError?.("Failed to start speech recognition. Please allow microphone access.");
-          cleanup();
-        }
-        return;
-      }
+      // Keep previous UX for system/both selection, but never block mic transcription.
+      if (source === "system" || source === "both") {
+        const inIframe = window.self !== window.top;
 
-      // For system/both modes, set up AudioContext and streams
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
+        if (inIframe) {
+          if (source === "system") {
+            onError?.("Tab audio capture is not available in embedded preview. Open the app in a new tab.");
+            cleanup();
+            return;
+          }
 
-      // Get mic stream for level monitoring (in "both" mode)
-      if (source === "both") {
-        try {
-          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          micStreamRef.current = micStream;
-          micMonitorRef.current = createLevelMonitor(micStream, audioContext);
-        } catch {
-          // Fall through — mic level monitoring is optional for speaker detection
-        }
-      }
+          onError?.("Tab audio is unavailable in preview — continuing with microphone transcription.");
+          setAudioSource("mic");
+          activeSourceRef.current = "mic";
+        } else {
+          try {
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: true,
+            });
+            displayStreamRef.current = displayStream;
 
-      // Capture tab/system audio
-      try {
-        if (window.self !== window.top) {
-          throw new Error("iframe");
-        }
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-        displayStreamRef.current = displayStream;
+            // We only need audio if available.
+            displayStream.getVideoTracks().forEach((track) => track.stop());
+            displayStream.getAudioTracks().forEach((track) => {
+              track.onended = () => cleanup();
+            });
+          } catch {
+            if (source === "system") {
+              onError?.("Screen/tab audio capture cancelled or not supported.");
+              cleanup();
+              return;
+            }
 
-        // Monitor system audio levels
-        systemMonitorRef.current = createLevelMonitor(displayStream, audioContext);
-
-        // Route system audio to speakers so mic captures it for speech recognition
-        const systemSrc = audioContext.createMediaStreamSource(displayStream);
-        systemSrc.connect(audioContext.destination);
-
-        // Stop video track (we only need audio)
-        displayStream.getVideoTracks().forEach((t) => t.stop());
-
-        // Handle user stopping screen share
-        displayStream.getAudioTracks().forEach((track) => {
-          track.onended = () => cleanup();
-        });
-      } catch (err) {
-        const isIframe = err instanceof Error && err.message === "iframe";
-        if (source === "system") {
-          onError?.(
-            isIframe
-              ? "Tab audio capture doesn't work in embedded preview. Open the app in a new tab, then try again."
-              : "Screen/tab audio capture cancelled or not supported."
-          );
-          cleanup();
-          return;
-        }
-        // For "both", fall back to mic only
-        if (isIframe) {
-          onError?.("Tab audio unavailable in preview — using mic only.");
+            onError?.("Could not access tab audio — continuing with microphone transcription.");
+            setAudioSource("mic");
+            activeSourceRef.current = "mic";
+          }
         }
       }
 
@@ -292,7 +194,7 @@ export function useSpeechRecognition({
         cleanup();
       }
     },
-    [cleanup, startRecognition, onError]
+    [cleanup, onError, startRecognition]
   );
 
   const stop = useCallback(() => {
@@ -305,3 +207,4 @@ export function useSpeechRecognition({
 
   return { isListening, audioSource, start, stop, interimTranscript };
 }
+
