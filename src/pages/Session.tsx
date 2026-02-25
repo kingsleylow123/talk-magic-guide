@@ -1,17 +1,35 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Zap, ArrowLeft, ChevronRight, ChevronLeft, MessageSquare, Lightbulb, Loader2 } from "lucide-react";
+import { Zap, ArrowLeft, ChevronRight, ChevronLeft, Lightbulb, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ObjectionPanel from "@/components/ObjectionPanel";
 import CoachingTip from "@/components/CoachingTip";
+import AudioControls from "@/components/AudioControls";
+import LiveTranscript from "@/components/LiveTranscript";
+import type { TranscriptEntry } from "@/components/LiveTranscript";
 import { analyzeScript, streamCoach } from "@/lib/sales-coach";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 
 interface ScriptSection {
   title: string;
   content: string;
   tone: string;
   tips: string;
+}
+
+// Keywords that indicate objections
+const OBJECTION_KEYWORDS = [
+  "too expensive", "can't afford", "not sure", "think about it", "talk to my",
+  "no money", "not interested", "too much", "competitor", "already have",
+  "don't need", "not right now", "later", "let me think", "spouse",
+  "partner", "budget", "price is", "cost too", "waste of money",
+  "scam", "doesn't work", "not for me", "i don't know",
+];
+
+function detectObjection(text: string): boolean {
+  const lower = text.toLowerCase();
+  return OBJECTION_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 const Session = () => {
@@ -22,7 +40,73 @@ const Session = () => {
   const [showObjection, setShowObjection] = useState(false);
   const [coachingTip, setCoachingTip] = useState("");
   const [isLoadingTip, setIsLoadingTip] = useState(false);
+  const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
+  const [liveCoachResponse, setLiveCoachResponse] = useState("");
+  const [isLiveCoaching, setIsLiveCoaching] = useState(false);
   const rawScript = sessionStorage.getItem("salesScript") || "";
+  const coachDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentTranscriptRef = useRef("");
+
+  // Accumulate recent transcript text for context
+  const handleTranscript = useCallback((text: string, isFinal: boolean) => {
+    if (!isFinal) return;
+
+    const isObjection = detectObjection(text);
+    setTranscriptEntries((prev) => [
+      ...prev,
+      { text, timestamp: Date.now(), isObjection },
+    ]);
+
+    recentTranscriptRef.current += " " + text;
+
+    // If objection detected, auto-open the objection panel
+    if (isObjection) {
+      setShowObjection(true);
+      toast("Objection detected!", {
+        description: text,
+        icon: <AlertTriangle className="h-4 w-4 text-destructive" />,
+      });
+    }
+
+    // Debounce live coaching — every 5 seconds of accumulated speech
+    if (coachDebounceRef.current) clearTimeout(coachDebounceRef.current);
+    coachDebounceRef.current = setTimeout(() => {
+      triggerLiveCoach(recentTranscriptRef.current.trim());
+      recentTranscriptRef.current = "";
+    }, 5000);
+  }, []);
+
+  const handleSpeechError = useCallback((error: string) => {
+    toast.error(error);
+  }, []);
+
+  const { isListening, audioSource, start, stop, interimTranscript } = useSpeechRecognition({
+    onTranscript: handleTranscript,
+    onError: handleSpeechError,
+  });
+
+  const triggerLiveCoach = useCallback(async (recentText: string) => {
+    if (!recentText || !sections[currentIndex]) return;
+    setIsLiveCoaching(true);
+    setLiveCoachResponse("");
+    try {
+      await streamCoach({
+        body: {
+          mode: "coaching_tip",
+          currentSection: sections[currentIndex].content,
+          conversationContext: `The prospect just said: "${recentText}". Current script section: ${sections[currentIndex].title}. Provide a brief, actionable coaching tip for what the salesperson should say or do next.`,
+        },
+        onDelta: (chunk) => setLiveCoachResponse((prev) => prev + chunk),
+        onDone: () => setIsLiveCoaching(false),
+        onError: (err) => {
+          toast.error(err);
+          setIsLiveCoaching(false);
+        },
+      });
+    } catch {
+      setIsLiveCoaching(false);
+    }
+  }, [currentIndex, sections]);
 
   useEffect(() => {
     if (!rawScript) {
@@ -35,14 +119,11 @@ const Session = () => {
   const loadScript = async () => {
     try {
       const result = await analyzeScript(rawScript);
-      // Try to parse JSON from the result
       let parsed: ScriptSection[];
       try {
-        // Remove potential markdown code blocks
         const cleaned = result.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
         parsed = JSON.parse(cleaned);
       } catch {
-        // Fallback: create sections from raw script
         const paragraphs = rawScript.split("\n\n").filter(Boolean);
         parsed = paragraphs.map((p, i) => ({
           title: `Section ${i + 1}`,
@@ -52,7 +133,7 @@ const Session = () => {
         }));
       }
       setSections(parsed);
-    } catch (err) {
+    } catch {
       toast.error("Failed to analyze script. Using raw sections.");
       const paragraphs = rawScript.split("\n\n").filter(Boolean);
       setSections(paragraphs.map((p, i) => ({
@@ -70,6 +151,7 @@ const Session = () => {
     if (currentIndex < sections.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setCoachingTip("");
+      setLiveCoachResponse("");
     }
   };
 
@@ -77,6 +159,7 @@ const Session = () => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
       setCoachingTip("");
+      setLiveCoachResponse("");
     }
   };
 
@@ -121,7 +204,7 @@ const Session = () => {
       <header className="border-b border-border/50 px-6 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="gap-1 text-muted-foreground">
+            <Button variant="ghost" size="sm" onClick={() => { stop(); navigate("/"); }} className="gap-1 text-muted-foreground">
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
@@ -139,7 +222,7 @@ const Session = () => {
               {sections.map((_, i) => (
                 <button
                   key={i}
-                  onClick={() => { setCurrentIndex(i); setCoachingTip(""); }}
+                  onClick={() => { setCurrentIndex(i); setCoachingTip(""); setLiveCoachResponse(""); }}
                   className={`h-2 w-2 rounded-full transition-all ${
                     i === currentIndex ? "w-6 bg-primary" : i < currentIndex ? "bg-primary/40" : "bg-muted-foreground/30"
                   }`}
@@ -155,6 +238,36 @@ const Session = () => {
         {/* Script Panel */}
         <div className="flex flex-1 flex-col p-6">
           <div className="mx-auto w-full max-w-3xl flex-1">
+            {/* Audio Controls */}
+            <div className="mb-4 animate-fade-in-up">
+              <AudioControls
+                isListening={isListening}
+                audioSource={audioSource}
+                onStart={start}
+                onStop={stop}
+              />
+            </div>
+
+            {/* Live Transcript */}
+            {(isListening || transcriptEntries.length > 0) && (
+              <div className="mb-4 rounded-xl border border-border/50 bg-card p-4 animate-fade-in-up">
+                <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Live Transcript</h3>
+                <LiveTranscript entries={transcriptEntries} interimText={interimTranscript} />
+              </div>
+            )}
+
+            {/* Live AI Coach Response */}
+            {(liveCoachResponse || isLiveCoaching) && (
+              <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4 animate-fade-in-up">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
+                  <Zap className="h-4 w-4" />
+                  Say This Now
+                  {isLiveCoaching && <Loader2 className="h-3 w-3 animate-spin" />}
+                </div>
+                <p className="text-sm leading-relaxed text-foreground">{liveCoachResponse}</p>
+              </div>
+            )}
+
             {/* Section Header */}
             <div className="mb-6 animate-fade-in-up">
               <div className="mb-2 flex items-center gap-2">
@@ -184,7 +297,7 @@ const Session = () => {
               <p className="text-sm text-muted-foreground">{current?.tips}</p>
             </div>
 
-            {/* AI Coaching Tip */}
+            {/* AI Coaching Tip (manual) */}
             <CoachingTip
               tip={coachingTip}
               isLoading={isLoadingTip}
@@ -202,14 +315,6 @@ const Session = () => {
             >
               <ChevronLeft className="h-4 w-4" />
               Previous
-            </Button>
-            <Button
-              onClick={() => setShowObjection(true)}
-              variant="outline"
-              className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-            >
-              <MessageSquare className="h-4 w-4" />
-              Handle Objection
             </Button>
             <Button
               onClick={goNext}
