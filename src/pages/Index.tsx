@@ -3,26 +3,36 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Zap, ArrowRight, Plus, X, Loader2, Brain, Shield, Mic, DollarSign, Gift, ShieldCheck } from "lucide-react";
+import { Zap, ArrowRight, Plus, X, Loader2, Brain, Shield, Mic, DollarSign, Gift, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { analyzeScript } from "@/lib/sales-coach";
 
 interface BonusItem {
   name: string;
   value: string;
 }
 
+const SAMPLE_OFFER = {
+  productName: "Facebook Accelerator Course",
+  productDescription: "12-week coaching program with weekly group calls, 1:1 strategy sessions, private community access, and a complete Facebook ads video course library.",
+  normalPrice: "$6,000",
+  discountedPrice: "$3,497 if you enroll today",
+  bonuses: [
+    { name: "Ad Template Library", value: "$997" },
+    { name: "Private Slack Community", value: "$500" },
+  ],
+  targetAudience: "Coaches, consultants, and service providers",
+  desiredResult: "Generate 10+ qualified leads per month using Facebook ads within 90 days",
+};
+
 const Index = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const navigate = useNavigate();
 
-  // Offer fields
   const [productName, setProductName] = useState("");
   const [productDescription, setProductDescription] = useState("");
   const [normalPrice, setNormalPrice] = useState("");
   const [discountedPrice, setDiscountedPrice] = useState("");
   const [bonuses, setBonuses] = useState<BonusItem[]>([{ name: "", value: "" }]);
-  const [riskReversal, setRiskReversal] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [desiredResult, setDesiredResult] = useState("");
 
@@ -32,6 +42,17 @@ const Index = () => {
     const updated = [...bonuses];
     updated[i][field] = val;
     setBonuses(updated);
+  };
+
+  const loadSample = () => {
+    setProductName(SAMPLE_OFFER.productName);
+    setProductDescription(SAMPLE_OFFER.productDescription);
+    setNormalPrice(SAMPLE_OFFER.normalPrice);
+    setDiscountedPrice(SAMPLE_OFFER.discountedPrice);
+    setBonuses(SAMPLE_OFFER.bonuses);
+    setTargetAudience(SAMPLE_OFFER.targetAudience);
+    setDesiredResult(SAMPLE_OFFER.desiredResult);
+    toast.success("Sample offer loaded!");
   };
 
   const handleGenerate = async () => {
@@ -48,7 +69,6 @@ const Index = () => {
       normalPrice,
       discountedPrice,
       bonuses: bonuses.filter((b) => b.name.trim()),
-      riskReversal,
       targetAudience,
       desiredResult,
     };
@@ -95,7 +115,7 @@ const Index = () => {
         <div className="mb-10 grid grid-cols-3 gap-3">
           {[
             { icon: Brain, title: "AI Script Builder", desc: "Auto-generates your closing script" },
-            { icon: Mic, title: "Real-Time Coaching", desc: "Guides you through every step" },
+            { icon: Mic, title: "Real-Time Coaching", desc: "Listens to your call & coaches live" },
             { icon: Shield, title: "Objection Handling", desc: "Instant rebuttals for any pushback" },
           ].map(({ icon: Icon, title, desc }) => (
             <div key={title} className="rounded-xl border border-border/50 bg-card p-4 text-center">
@@ -108,6 +128,14 @@ const Index = () => {
 
         {/* Form */}
         <div className="space-y-6 rounded-2xl border border-border/50 bg-card p-6 shadow-lg">
+          {/* Sample Script Button */}
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={loadSample} className="gap-1.5 text-xs text-primary">
+              <FileText className="h-3.5 w-3.5" />
+              Load Sample Offer
+            </Button>
+          </div>
+
           {/* Product */}
           <div className="space-y-4">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -178,15 +206,6 @@ const Index = () => {
             ))}
           </div>
 
-          {/* Risk Reversal */}
-          <div className="space-y-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              Risk Reversal / Guarantee
-            </h2>
-            <Textarea value={riskReversal} onChange={(e) => setRiskReversal(e.target.value)} placeholder="e.g. 30-day money-back guarantee, refundable deposit, pay-after-results option..." className="min-h-[60px] resize-none border-border/50 bg-muted/30 text-sm" />
-          </div>
-
           {/* Generate Button */}
           <Button onClick={handleGenerate} disabled={isGenerating || !productName.trim() || !normalPrice.trim()} className="w-full gap-2 bg-primary py-6 text-lg font-semibold text-primary-foreground hover:bg-primary/90" size="lg">
             {isGenerating ? (
@@ -214,7 +233,6 @@ async function generateScript(offer: {
   normalPrice: string;
   discountedPrice: string;
   bonuses: { name: string; value: string }[];
-  riskReversal: string;
   targetAudience: string;
   desiredResult: string;
 }): Promise<string> {
@@ -233,7 +251,6 @@ ${offer.desiredResult ? `Desired Result: ${offer.desiredResult}` : ""}
 Normal Price: ${offer.normalPrice}
 ${offer.discountedPrice ? `Discounted Price: ${offer.discountedPrice}` : ""}
 ${bonusList ? `Bonuses: ${bonusList}` : ""}
-${offer.riskReversal ? `Risk Reversal/Guarantee: ${offer.riskReversal}` : ""}
 `.trim();
 
   const resp = await fetch(COACH_URL, {
