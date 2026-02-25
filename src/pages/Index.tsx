@@ -1,72 +1,69 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Mic, FileText, Zap, ArrowRight, Shield, Brain } from "lucide-react";
+import { Zap, ArrowRight, Plus, X, Loader2, Brain, Shield, Mic, DollarSign, Gift, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { analyzeScript } from "@/lib/sales-coach";
+
+interface BonusItem {
+  name: string;
+  value: string;
+}
 
 const Index = () => {
-  const [script, setScript] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const navigate = useNavigate();
 
-  const handleStartSession = () => {
-    if (!script.trim()) {
-      toast.error("Please paste your sales script first");
-      return;
-    }
-    sessionStorage.setItem("salesScript", script);
-    navigate("/session");
+  // Offer fields
+  const [productName, setProductName] = useState("");
+  const [productDescription, setProductDescription] = useState("");
+  const [normalPrice, setNormalPrice] = useState("");
+  const [discountedPrice, setDiscountedPrice] = useState("");
+  const [bonuses, setBonuses] = useState<BonusItem[]>([{ name: "", value: "" }]);
+  const [riskReversal, setRiskReversal] = useState("");
+  const [targetAudience, setTargetAudience] = useState("");
+  const [desiredResult, setDesiredResult] = useState("");
+
+  const addBonus = () => setBonuses([...bonuses, { name: "", value: "" }]);
+  const removeBonus = (i: number) => setBonuses(bonuses.filter((_, idx) => idx !== i));
+  const updateBonus = (i: number, field: "name" | "value", val: string) => {
+    const updated = [...bonuses];
+    updated[i][field] = val;
+    setBonuses(updated);
   };
 
-  const exampleScript = `Great, so what made you decide to schedule this appointment with me?
+  const handleGenerate = async () => {
+    if (!productName.trim() || !normalPrice.trim()) {
+      toast.error("Please fill in at least the product name and price");
+      return;
+    }
 
-[Ask these 5 consultation questions and dig deep:]
+    setIsGenerating(true);
 
-1. What is the result you would like to achieve?
-2. What is your current situation? (Around how much are you making? $0-$2k, $2k-$5k, $5k-$10k, or more?)
-3. What is the biggest pain about staying in your current situation?
-4. What are the obstacles preventing you from getting to your desired result?
-5. On a scale of 1 to 10, how willing are you to get to your desired result?
+    const offerDetails = {
+      productName,
+      productDescription,
+      normalPrice,
+      discountedPrice,
+      bonuses: bonuses.filter((b) => b.name.trim()),
+      riskReversal,
+      targetAudience,
+      desiredResult,
+    };
 
-[If 7/10 and above, proceed to pitch:]
+    sessionStorage.setItem("offerDetails", JSON.stringify(offerDetails));
 
-Based on what you said, I know the perfect solution to help you! Shall I share it with you?
-
-[Recap consultation questions - make them say "yes, yes, yes":]
-
-Just now you mentioned you wanted [Result] correct? And you mentioned you are currently [current situation] correct? And your main obstacles are [obstacles] correct? And your biggest pain is [pain] correct?
-
-Okay based on what you said, I have the perfect solution just for you.
-
-[Deal or No Deal pre-frame:]
-
-Ok so here's how I normally like to do my calls. I will explain to you everything I have to offer, and how it can help you. You can ask me any questions. By the end of this call, I would want you to make a decision. Either a "Yes" or a "No". If it's a "Yes", great! If it's a "No", that's fine. If you really need to think about it, you can put in a refundable deposit. Is that ok?
-
-[Present the solution:]
-
-So I have this [product/service] that helps you to [benefit]. It consists of: [list components]
-
-And this will potentially help you get from [current situation] to [desired situation] and overcome [obstacles].
-
-[Qualification questions - let THEM sell YOU:]
-
-Do you feel that this will be able to help you? How do you feel it can help you?
-
-[Handle logistics before price:]
-
-Are you able to make a decision on your own? If this is the right fit, can you start now? Is there anything else that can potentially stop you from doing this?
-
-[Reveal price only when 80% sure they'll buy:]
-
-Ok great, based on what you are telling me, I think this would be the right fit for you. And the reason why is because I like that [praise them]. So do you want to enrol?
-
-This [product] is going to be $[price]. Are you okay with that?
-
-[Collect payment on the call. Embrace the silence while they transfer.]
-
-[Build rapport before ending - whether closed or not:]
-
-Ok so I'm just going to give you a quick action plan. Did you get value? Great! Have a nice day ahead!`;
+    try {
+      const result = await generateScript(offerDetails);
+      sessionStorage.setItem("salesScript", result);
+      navigate("/session");
+    } catch (err) {
+      toast.error("Failed to generate script. Please try again.");
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -83,74 +80,200 @@ Ok so I'm just going to give you a quick action plan. Did you get value? Great! 
         </div>
       </header>
 
-      {/* Hero */}
-      <main className="mx-auto max-w-5xl px-6 py-16">
-        <div className="mb-12 text-center">
-          <h1 className="mb-4 text-5xl font-extrabold tracking-tight">
-            Close More Deals with{" "}
-            <span className="text-gradient-primary">AI-Powered</span> Coaching
+      <main className="mx-auto max-w-3xl px-6 py-12">
+        {/* Hero */}
+        <div className="mb-10 text-center">
+          <h1 className="mb-3 text-4xl font-extrabold tracking-tight">
+            Build Your <span className="text-gradient-primary">Closing Script</span> in Seconds
           </h1>
-          <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-            Paste your sales script below. Our AI will guide you through every step 
-            and help you handle objections in real time.
+          <p className="mx-auto max-w-xl text-muted-foreground">
+            Just fill in your offer details. Our AI uses the Application Close framework to generate a complete sales script with real-time coaching.
           </p>
         </div>
 
         {/* Features */}
-        <div className="mb-12 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mb-10 grid grid-cols-3 gap-3">
           {[
-            { icon: Brain, title: "Smart Script Analysis", desc: "AI breaks down your script into actionable sections" },
-            { icon: Mic, title: "Real-Time Coaching", desc: "Get tips and suggestions as you move through your call" },
-            { icon: Shield, title: "Objection Handling", desc: "Instant responses to any prospect objection" },
+            { icon: Brain, title: "AI Script Builder", desc: "Auto-generates your closing script" },
+            { icon: Mic, title: "Real-Time Coaching", desc: "Guides you through every step" },
+            { icon: Shield, title: "Objection Handling", desc: "Instant rebuttals for any pushback" },
           ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="rounded-xl border border-border/50 bg-card p-5">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <Icon className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="mb-1 font-semibold">{title}</h3>
-              <p className="text-sm text-muted-foreground">{desc}</p>
+            <div key={title} className="rounded-xl border border-border/50 bg-card p-4 text-center">
+              <Icon className="mx-auto mb-2 h-5 w-5 text-primary" />
+              <h3 className="text-sm font-semibold">{title}</h3>
+              <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
           ))}
         </div>
 
-        {/* Script Input */}
-        <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-lg">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              <h2 className="text-lg font-semibold">Your Sales Script</h2>
+        {/* Form */}
+        <div className="space-y-6 rounded-2xl border border-border/50 bg-card p-6 shadow-lg">
+          {/* Product */}
+          <div className="space-y-4">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Your Offer
+            </h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Product / Service Name *</label>
+                <Input value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="e.g. Facebook Accelerator Course" className="border-border/50 bg-muted/30" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Target Audience</label>
+                <Input value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} placeholder="e.g. Coaches, consultants, agents" className="border-border/50 bg-muted/30" />
+              </div>
             </div>
-            <button
-              onClick={() => setScript(exampleScript)}
-              className="text-sm text-primary hover:underline"
-            >
-              Load example script
-            </button>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-muted-foreground">What does it help them achieve?</label>
+              <Input value={desiredResult} onChange={(e) => setDesiredResult(e.target.value)} placeholder="e.g. Get 10 clients per month using Facebook ads" className="border-border/50 bg-muted/30" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-muted-foreground">Description (components, what's included)</label>
+              <Textarea value={productDescription} onChange={(e) => setProductDescription(e.target.value)} placeholder="e.g. 3-month 1:1 coaching, weekly calls, WhatsApp access, video course..." className="min-h-[80px] resize-none border-border/50 bg-muted/30 text-sm" />
+            </div>
           </div>
-          <Textarea
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            placeholder="Paste your sales script here... The AI will analyze it and guide you through each section during your call."
-            className="min-h-[280px] resize-none border-border/50 bg-muted/30 font-mono text-sm leading-relaxed placeholder:text-muted-foreground/50"
-          />
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              {script.length > 0 ? `${script.split(/\s+/).filter(Boolean).length} words` : "Paste or type your script to get started"}
-            </span>
-            <Button
-              onClick={handleStartSession}
-              disabled={!script.trim()}
-              className="gap-2 bg-primary px-6 font-semibold text-primary-foreground hover:bg-primary/90"
-              size="lg"
-            >
-              Start Coaching Session
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+
+          {/* Pricing */}
+          <div className="space-y-4">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <DollarSign className="h-5 w-5 text-accent" />
+              Pricing
+            </h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Normal Price *</label>
+                <Input value={normalPrice} onChange={(e) => setNormalPrice(e.target.value)} placeholder="e.g. $12,000" className="border-border/50 bg-muted/30" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-muted-foreground">Discounted Price (if any)</label>
+                <Input value={discountedPrice} onChange={(e) => setDiscountedPrice(e.target.value)} placeholder="e.g. $5,000 if they decide today" className="border-border/50 bg-muted/30" />
+              </div>
+            </div>
           </div>
+
+          {/* Bonuses */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <Gift className="h-5 w-5 text-accent" />
+                Bonuses
+              </h2>
+              <Button variant="ghost" size="sm" onClick={addBonus} className="gap-1 text-xs text-primary">
+                <Plus className="h-3 w-3" /> Add Bonus
+              </Button>
+            </div>
+            {bonuses.map((bonus, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex-1 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <Input value={bonus.name} onChange={(e) => updateBonus(i, "name", e.target.value)} placeholder={`Bonus ${i + 1} name`} className="border-border/50 bg-muted/30 text-sm" />
+                  <Input value={bonus.value} onChange={(e) => updateBonus(i, "value", e.target.value)} placeholder="Value (e.g. $2,000)" className="border-border/50 bg-muted/30 text-sm" />
+                </div>
+                {bonuses.length > 1 && (
+                  <Button variant="ghost" size="sm" onClick={() => removeBonus(i)} className="mt-1 h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Risk Reversal */}
+          <div className="space-y-3">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Risk Reversal / Guarantee
+            </h2>
+            <Textarea value={riskReversal} onChange={(e) => setRiskReversal(e.target.value)} placeholder="e.g. 30-day money-back guarantee, refundable deposit, pay-after-results option..." className="min-h-[60px] resize-none border-border/50 bg-muted/30 text-sm" />
+          </div>
+
+          {/* Generate Button */}
+          <Button onClick={handleGenerate} disabled={isGenerating || !productName.trim() || !normalPrice.trim()} className="w-full gap-2 bg-primary py-6 text-lg font-semibold text-primary-foreground hover:bg-primary/90" size="lg">
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Generating Your Script...
+              </>
+            ) : (
+              <>
+                Generate Closing Script
+                <ArrowRight className="h-5 w-5" />
+              </>
+            )}
+          </Button>
         </div>
       </main>
     </div>
   );
 };
+
+// Helper to build prompt and call the AI
+async function generateScript(offer: {
+  productName: string;
+  productDescription: string;
+  normalPrice: string;
+  discountedPrice: string;
+  bonuses: { name: string; value: string }[];
+  riskReversal: string;
+  targetAudience: string;
+  desiredResult: string;
+}): Promise<string> {
+  const COACH_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sales-coach`;
+
+  const bonusList = offer.bonuses
+    .filter((b) => b.name.trim())
+    .map((b) => `${b.name}${b.value ? ` (${b.value} value)` : ""}`)
+    .join(", ");
+
+  const offerSummary = `
+Product/Service: ${offer.productName}
+${offer.productDescription ? `Description: ${offer.productDescription}` : ""}
+${offer.targetAudience ? `Target Audience: ${offer.targetAudience}` : ""}
+${offer.desiredResult ? `Desired Result: ${offer.desiredResult}` : ""}
+Normal Price: ${offer.normalPrice}
+${offer.discountedPrice ? `Discounted Price: ${offer.discountedPrice}` : ""}
+${bonusList ? `Bonuses: ${bonusList}` : ""}
+${offer.riskReversal ? `Risk Reversal/Guarantee: ${offer.riskReversal}` : ""}
+`.trim();
+
+  const resp = await fetch(COACH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ mode: "generate_script", offerSummary }),
+  });
+
+  if (!resp.ok || !resp.body) throw new Error("Failed to generate");
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let result = "";
+  let textBuffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    textBuffer += decoder.decode(value, { stream: true });
+
+    let newlineIndex: number;
+    while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+      let line = textBuffer.slice(0, newlineIndex);
+      textBuffer = textBuffer.slice(newlineIndex + 1);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (!line.startsWith("data: ")) continue;
+      const jsonStr = line.slice(6).trim();
+      if (jsonStr === "[DONE]") break;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) result += content;
+      } catch { /* partial */ }
+    }
+  }
+
+  return result;
+}
 
 export default Index;
