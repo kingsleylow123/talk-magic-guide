@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Zap, ArrowLeft, ChevronRight, ChevronLeft, Lightbulb, Loader2, AlertTriangle } from "lucide-react";
+import { Zap, ArrowLeft, ChevronRight, ChevronLeft, Lightbulb, Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import ObjectionPanel from "@/components/ObjectionPanel";
@@ -297,6 +297,32 @@ const Session = () => {
         {/* Script Panel */}
         <div className="flex flex-1 flex-col p-6">
           <div className="mx-auto w-full max-w-3xl flex-1">
+            {/* Iframe Warning Banner */}
+            {window.self !== window.top && (
+              <div className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 animate-fade-in-up">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      Audio recording requires the app to run in its own tab
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Browser security blocks microphone access inside embedded previews.
+                    </p>
+                  </div>
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-yellow-500/20 px-3 py-1.5 text-sm font-medium text-yellow-400 transition hover:bg-yellow-500/30"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open in New Tab
+                  </a>
+                </div>
+              </div>
+            )}
+
             {/* Audio Controls */}
             <div className="mb-4 animate-fade-in-up">
               <AudioControls
