@@ -9,6 +9,12 @@ interface Props {
   onStop: () => void;
 }
 
+const sourceLabels: Record<AudioSource, string> = {
+  mic: "Microphone",
+  system: "Zoom / Tab Audio",
+  both: "Mic + Zoom",
+};
+
 const AudioControls = ({ isListening, audioSource, onStart, onStop }: Props) => {
   if (isListening) {
     return (
@@ -19,7 +25,7 @@ const AudioControls = ({ isListening, audioSource, onStart, onStop }: Props) => 
             <span className="relative inline-flex h-3 w-3 rounded-full bg-destructive" />
           </span>
           <span className="text-sm font-medium text-foreground">
-            Listening via {audioSource === "mic" ? "Microphone" : audioSource === "system" ? "Tab Audio" : "Mic + Tab"}
+            Listening via {sourceLabels[audioSource]}
           </span>
         </div>
         <Button
@@ -36,35 +42,40 @@ const AudioControls = ({ isListening, audioSource, onStart, onStop }: Props) => 
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-muted-foreground">Listen via:</span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onStart("mic")}
-        className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-      >
-        <Mic className="h-3.5 w-3.5" />
-        Microphone
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onStart("system")}
-        className="gap-1.5 border-accent/30 text-accent hover:bg-accent/10"
-      >
-        <Monitor className="h-3.5 w-3.5" />
-        Tab Audio
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onStart("both")}
-        className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-      >
-        <Radio className="h-3.5 w-3.5" />
-        Both
-      </Button>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground">Listen via:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onStart("mic")}
+          className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+        >
+          <Mic className="h-3.5 w-3.5" />
+          Microphone
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onStart("system")}
+          className="gap-1.5 border-accent/30 text-accent hover:bg-accent/10"
+        >
+          <Monitor className="h-3.5 w-3.5" />
+          Zoom / Tab Audio
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onStart("both")}
+          className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+        >
+          <Radio className="h-3.5 w-3.5" />
+          Both (Recommended)
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        💡 For Zoom calls, use <strong>Both</strong> — you'll share a browser tab so the AI hears the prospect too.
+      </p>
     </div>
   );
 };
