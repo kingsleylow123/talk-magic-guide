@@ -10,6 +10,7 @@ import LiveTranscript from "@/components/LiveTranscript";
 import type { TranscriptEntry } from "@/components/LiveTranscript";
 import { analyzeScript, streamCoach } from "@/lib/sales-coach";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import type { Speaker } from "@/hooks/use-speech-recognition";
 
 import type { ScriptSection } from "@/lib/script-template";
 
@@ -66,13 +67,13 @@ const Session = () => {
   const sectionKeywordsRef = useRef<string[]>([]);
 
   // Accumulate recent transcript text for context
-  const handleTranscript = useCallback((text: string, isFinal: boolean) => {
+  const handleTranscript = useCallback((text: string, isFinal: boolean, speaker: Speaker) => {
     if (!isFinal) return;
 
     const isObjection = detectObjection(text);
     setTranscriptEntries((prev) => [
       ...prev,
-      { text, timestamp: Date.now(), isObjection },
+      { text, timestamp: Date.now(), isObjection, speaker },
     ]);
 
     recentTranscriptRef.current += " " + text;
