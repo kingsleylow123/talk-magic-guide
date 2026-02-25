@@ -11,12 +11,7 @@ import type { TranscriptEntry } from "@/components/LiveTranscript";
 import { analyzeScript, streamCoach } from "@/lib/sales-coach";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 
-interface ScriptSection {
-  title: string;
-  content: string;
-  tone: string;
-  tips: string;
-}
+import type { ScriptSection } from "@/lib/script-template";
 
 // Keywords that indicate objections
 const OBJECTION_KEYWORDS = [
@@ -62,7 +57,9 @@ const Session = () => {
   const [liveCoachResponse, setLiveCoachResponse] = useState("");
   const [isLiveCoaching, setIsLiveCoaching] = useState(false);
   const [autoAdvance, setAutoAdvance] = useState(true);
+  const scriptMode = sessionStorage.getItem("scriptMode") || "pasted";
   const rawScript = sessionStorage.getItem("salesScript") || "";
+  const preBuiltSections = sessionStorage.getItem("scriptSections");
   const coachDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentTranscriptRef = useRef("");
   const sectionTranscriptRef = useRef(""); // accumulates transcript for the current section
@@ -149,6 +146,19 @@ const Session = () => {
   }, [currentIndex, sections]);
 
   useEffect(() => {
+    if (scriptMode === "generated" && preBuiltSections) {
+      // Pre-built sections from template — no AI needed
+      try {
+        const parsed = JSON.parse(preBuiltSections);
+        setSections(parsed);
+      } catch {
+        navigate("/");
+        return;
+      }
+      setIsAnalyzing(false);
+      return;
+    }
+
     if (!rawScript) {
       navigate("/");
       return;
