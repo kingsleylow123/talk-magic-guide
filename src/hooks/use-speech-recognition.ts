@@ -226,6 +226,10 @@ export function useSpeechRecognition({
       // For system/both: capture tab audio
       if (source === "system" || source === "both") {
         try {
+          // getDisplayMedia requires the page NOT be in an iframe
+          if (window.self !== window.top) {
+            throw new Error("iframe");
+          }
           const displayStream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
             audio: true,
@@ -236,25 +240,31 @@ export function useSpeechRecognition({
           systemMonitorRef.current = createLevelMonitor(displayStream, audioContext);
 
           // Route system audio to speakers so mic captures it for speech recognition
-          const systemSource = audioContext.createMediaStreamSource(displayStream);
-          systemSource.connect(audioContext.destination);
+          const systemSrc = audioContext.createMediaStreamSource(displayStream);
+          systemSrc.connect(audioContext.destination);
 
           // Stop video track (we only need audio)
           displayStream.getVideoTracks().forEach((t) => t.stop());
 
           // Handle user stopping screen share
           displayStream.getAudioTracks().forEach((track) => {
-            track.onended = () => {
-              cleanup();
-            };
+            track.onended = () => cleanup();
           });
         } catch (err) {
+          const isIframe = err instanceof Error && err.message === "iframe";
           if (source === "system") {
-            onError?.("Screen/tab audio capture cancelled or not supported.");
+            onError?.(
+              isIframe
+                ? "Tab audio capture doesn't work in embedded preview. Open the app in a new tab (click the arrow icon top-right), then try again."
+                : "Screen/tab audio capture cancelled or not supported."
+            );
             cleanup();
             return;
           }
-          // For "both", continue with mic only
+          // For "both", fall back to mic only and notify
+          if (isIframe) {
+            onError?.("Tab audio unavailable in preview — using mic only. Open in a new tab for full dual-source capture.");
+          }
         }
       }
 
