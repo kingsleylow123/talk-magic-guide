@@ -14,22 +14,59 @@ const Index = () => {
       toast.error("Please paste your sales script first");
       return;
     }
-    // Store script in sessionStorage for the session page
     sessionStorage.setItem("salesScript", script);
     navigate("/session");
   };
 
-  const exampleScript = `Hi [Name], thanks for taking the time to chat with me today. I know you're busy, so I'll keep this focused.
+  const exampleScript = `Great, so what made you decide to schedule this appointment with me?
 
-I've been looking into [Company] and noticed you're dealing with [pain point]. Is that something that's been a challenge for you?
+[Ask these 5 consultation questions and dig deep:]
 
-[Listen and acknowledge]
+1. What is the result you would like to achieve?
+2. What is your current situation? (Around how much are you making? $0-$2k, $2k-$5k, $5k-$10k, or more?)
+3. What is the biggest pain about staying in your current situation?
+4. What are the obstacles preventing you from getting to your desired result?
+5. On a scale of 1 to 10, how willing are you to get to your desired result?
 
-That makes total sense. A lot of our clients were in the same boat before they started using our solution. What we do is [brief value proposition].
+[If 7/10 and above, proceed to pitch:]
 
-The result? Our clients typically see [specific result] within [timeframe].
+Based on what you said, I know the perfect solution to help you! Shall I share it with you?
 
-I'd love to show you exactly how it works. Can we schedule a quick 15-minute demo this week?`;
+[Recap consultation questions - make them say "yes, yes, yes":]
+
+Just now you mentioned you wanted [Result] correct? And you mentioned you are currently [current situation] correct? And your main obstacles are [obstacles] correct? And your biggest pain is [pain] correct?
+
+Okay based on what you said, I have the perfect solution just for you.
+
+[Deal or No Deal pre-frame:]
+
+Ok so here's how I normally like to do my calls. I will explain to you everything I have to offer, and how it can help you. You can ask me any questions. By the end of this call, I would want you to make a decision. Either a "Yes" or a "No". If it's a "Yes", great! If it's a "No", that's fine. If you really need to think about it, you can put in a refundable deposit. Is that ok?
+
+[Present the solution:]
+
+So I have this [product/service] that helps you to [benefit]. It consists of: [list components]
+
+And this will potentially help you get from [current situation] to [desired situation] and overcome [obstacles].
+
+[Qualification questions - let THEM sell YOU:]
+
+Do you feel that this will be able to help you? How do you feel it can help you?
+
+[Handle logistics before price:]
+
+Are you able to make a decision on your own? If this is the right fit, can you start now? Is there anything else that can potentially stop you from doing this?
+
+[Reveal price only when 80% sure they'll buy:]
+
+Ok great, based on what you are telling me, I think this would be the right fit for you. And the reason why is because I like that [praise them]. So do you want to enrol?
+
+This [product] is going to be $[price]. Are you okay with that?
+
+[Collect payment on the call. Embrace the silence while they transfer.]
+
+[Build rapport before ending - whether closed or not:]
+
+Ok so I'm just going to give you a quick action plan. Did you get value? Great! Have a nice day ahead!`;
 
   return (
     <div className="min-h-screen bg-background">
